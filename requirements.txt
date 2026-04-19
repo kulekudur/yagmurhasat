@@ -23,7 +23,7 @@ pyproj>=3.6.0
 # API & Data Fetching
 requests>=2.31.0
 httpx>=0.25.0
-meteostat>=1.2.1
+meteostat>=1.6.5
 
 # Database & ORM
 sqlalchemy>=2.0.0
