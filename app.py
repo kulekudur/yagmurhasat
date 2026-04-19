@@ -52,50 +52,54 @@ Stokastik yağış oluşturmayı, depo dinamiğini, işçi tüketimini ve ekonom
 # ===== YARDIMCI FONKSİYONLAR =====
 @st.cache_data
 def fetch_weather_data(latitude, longitude, year=2024):
-    """Meteostat API'dan meteoroloji verisi çek"""
+    """Open-Meteo API'dan gerçek meteoroloji verisi çek (Ücretsiz)"""
     try:
-        # Meteostat 1.6.5+ için doğru import yolu
-        try:
-            from meteostat import Stations, Daily
-        except ImportError:
-            from meteostat.daily import Daily
-            from meteostat.stations import Stations
+        import requests
         
-        # Yakın istasyonu bul
-        stations = Stations()
-        stations = stations.nearby(latitude, longitude)
-        station = stations.fetch(1)
+        # Open-Meteo API endpoint (tarihsel veriler)
+        url = "https://archive-api.open-meteo.com/v1/archive"
         
-        if station.empty:
-            st.warning("Yakındaki meteoroloji istasyonu bulunamadı")
+        start_date = f"{year}-01-01"
+        end_date = f"{year}-12-31"
+        
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "start_date": start_date,
+            "end_date": end_date,
+            "daily": "precipitation_sum,temperature_2m_max,temperature_2m_min,temperature_2m_mean",
+            "timezone": "auto"
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if "daily" not in data:
+            st.warning("Veri alınamadı")
             return None
         
-        # En yakındaki istasyonu seç
-        station_id = station.index[0]
+        # DataFrame oluştur
+        df = pd.DataFrame({
+            'prcp': data['daily']['precipitation_sum'],
+            'tmax': data['daily']['temperature_2m_max'],
+            'tmin': data['daily']['temperature_2m_min'],
+            'tavg': data['daily']['temperature_2m_mean'],
+        }, index=pd.to_datetime(data['daily']['time']))
         
-        # Veri çek
-        start = pd.Timestamp(year, 1, 1)
-        end = pd.Timestamp(year, 12, 31)
+        # NaN değerleri sıfırla
+        df = df.fillna(0)
         
-        data = Daily(station_id, start, end).fetch()
-        
-        if data.empty:
-            return None
-        
-        data['prcp'] = data['prcp'].fillna(0)
-        return data
+        st.success(f"✅ Gerçek veriler başarıyla alındı: {latitude:.2f}°N, {longitude:.2f}°E")
+        return df
     
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ API hatası: {str(e)}")
+        return None
     except Exception as e:
-        st.warning(f"Meteoroloji verisi alınamadı: {str(e)}")
-        # Fallback: Simüle edilmiş veriler dön
-        dates = pd.date_range(f'{year}-01-01', f'{year}-12-31', freq='D')
-        simulated_data = pd.DataFrame({
-            'prcp': np.random.gamma(2, 2, len(dates)),
-            'tavg': 15 + 10 * np.sin(np.arange(len(dates)) * 2 * np.pi / 365),
-            'tmin': 10 + 10 * np.sin(np.arange(len(dates)) * 2 * np.pi / 365),
-            'tmax': 20 + 10 * np.sin(np.arange(len(dates)) * 2 * np.pi / 365),
-        }, index=dates)
-        return simulated_data
+        st.error(f"❌ Veri işleme hatası: {str(e)}")
+        return None
 
 
 def create_rain_animation(daily_rain, days_to_show=30):
