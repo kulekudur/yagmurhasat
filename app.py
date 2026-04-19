@@ -166,127 +166,185 @@ def draw_worker_simulation(worker_count, water_available, water_needed):
     return fig
 
 
-# ===== KENAR ÇUBUĞU KONTROLLERİ =====
-st.sidebar.header("⚙️ Simülasyon Parametreleri")
+# ===== KENAR ÇUBUĞU SEÇENEKLER TAB'I =====
+st.sidebar.markdown("## 📍 Seçim Yap")
 
-# Parametre girişleri
-çatı_alanı = st.sidebar.slider(
-    "Çatı Alanı (m²)",
-    min_value=100,
-    max_value=2000,
-    value=config.ROOF_AREA_DEFAULT,
-    step=50,
-    help="Su toplama için toplam çatı alanı"
+sidebar_choice = st.sidebar.radio(
+    "Ne Yapmak İstiyorsunuz?",
+    ["⚙️ Simülasyon Parametreleri", "🗺️ Harita & Meteoroloji"],
+    label_visibility="collapsed"
 )
 
-çatı_verimlilik = st.sidebar.slider(
-    "Toplama Verimliliği",
-    min_value=0.0,
-    max_value=1.0,
-    value=config.ROOF_EFFICIENCY,
-    step=0.05,
-    help="Sistem verimliliği (0 = toplama yok, 1 = mükemmel)"
-)
+if sidebar_choice == "🗺️ Harita & Meteoroloji":
+    st.sidebar.markdown("---")
+    st.sidebar.header("🗺️ Konum Seçimi")
+    st.sidebar.markdown("Yağmur verisi almak için aşağıdan koordinat girin veya haritada tıklayın.")
+    
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        map_latitude = st.sidebar.number_input("Enlem (Latitude)", value=39.9334, format="%.4f")
+    with col2:
+        map_longitude = st.sidebar.number_input("Boylam (Longitude)", value=32.8597, format="%.4f")
+    
+    # Folium haritası
+    m = folium.Map(
+        location=[map_latitude, map_longitude],
+        zoom_start=12,
+        tiles="OpenStreetMap"
+    )
+    
+    folium.Marker(
+        [map_latitude, map_longitude],
+        popup="Seçili Konum",
+        tooltip="Yağmur Ölçüm Noktası",
+        icon=folium.Icon(color='blue', icon='cloud')
+    ).add_to(m)
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🗺️ Etkileşimli Harita")
+    map_data = st_folium(m, width=340, height=400)
+    
+    if map_data and map_data.get('last_clicked'):
+        st.session_state.selected_location = (map_data['last_clicked']['lat'], map_data['last_clicked']['lng'])
+        st.sidebar.success(f"✓ Konum: {map_data['last_clicked']['lat']:.4f}, {map_data['last_clicked']['lng']:.4f}")
+    
+    st.sidebar.markdown("---")
+    
+    if st.sidebar.button("📊 Meteoroloji Verisi Çek", use_container_width=True):
+        if st.session_state.selected_location or (map_latitude, map_longitude):
+            lat, lon = st.session_state.selected_location if st.session_state.selected_location else (map_latitude, map_longitude)
+            with st.spinner(f"📡 {lat:.2f}, {lon:.2f}'den veriler alınıyor..."):
+                weather_data = fetch_weather_data(lat, lon, 2024)
+                if weather_data is not None:
+                    st.session_state.weather_data = weather_data
+                    st.sidebar.success("✓ Meteoroloji verisi başarıyla alındı!")
+                else:
+                    st.sidebar.error("Meteoroloji verisi alınamadı.")
+        else:
+            st.sidebar.error("Lütfen bir konum seçin.")
 
-depo_kapasitesi = st.sidebar.slider(
-    "Depo Kapasitesi (Litre)",
-    min_value=5000,
-    max_value=500000,
-    value=config.TANK_CAPACITY_DEFAULT,
-    step=5000,
-    help="Depolama tanğının kapasitesi"
-)
+else:
+    # ===== KENAR ÇUBUĞU KONTROLLERİ =====
+    st.sidebar.header("⚙️ Simülasyon Parametreleri")
+    
+    # Parametre girişleri
+    çatı_alanı = st.sidebar.slider(
+        "Çatı Alanı (m²)",
+        min_value=100,
+        max_value=2000,
+        value=config.ROOF_AREA_DEFAULT,
+        step=50,
+        help="Su toplama için toplam çatı alanı"
+    )
 
-çalışan_sayısı = st.sidebar.slider(
-    "Çalışan Sayısı",
-    min_value=1,
-    max_value=300,
-    value=config.WORKER_COUNT_DEFAULT,
-    step=5,
-    help="Su tüketen kişi sayısı"
-)
+    çatı_verimlilik = st.sidebar.slider(
+        "Toplama Verimliliği",
+        min_value=0.0,
+        max_value=1.0,
+        value=config.ROOF_EFFICIENCY,
+        step=0.05,
+        help="Sistem verimliliği (0 = toplama yok, 1 = mükemmel)"
+    )
 
-tüketim_oranı = st.sidebar.slider(
-    "Tüketim Oranı (L/çalışan/saat)",
-    min_value=0.5,
-    max_value=5.0,
-    value=config.CONSUMPTION_PER_WORKER_PER_HOUR,
-    step=0.5,
-    help="Çalışan başına saat başına su tüketimi"
-)
+    depo_kapasitesi = st.sidebar.slider(
+        "Depo Kapasitesi (Litre)",
+        min_value=5000,
+        max_value=500000,
+        value=config.TANK_CAPACITY_DEFAULT,
+        step=5000,
+        help="Depolama tanğının kapasitesi"
+    )
 
-yağış_tohumu = st.sidebar.slider(
-    "Yağış Tohumu (Tekrarlanabilirlik için)",
-    min_value=0,
-    max_value=1000,
-    value=config.RAIN_SEED,
-    step=1,
-    help="Yağış oluşturmak için rastgele tohum"
-)
+    çalışan_sayısı = st.sidebar.slider(
+        "Çalışan Sayısı",
+        min_value=1,
+        max_value=300,
+        value=config.WORKER_COUNT_DEFAULT,
+        step=5,
+        help="Su tüketen kişi sayısı"
+    )
 
-# Ekonomik parametreler
-st.sidebar.markdown("### 💰 Ekonomik Parametreler")
-su_fiyatı = st.sidebar.number_input(
-    "Su Fiyatı (₺/Litre)",
-    min_value=0.1,
-    max_value=5.0,
-    value=config.WATER_PRICE,
-    step=0.1
-)
+    tüketim_oranı = st.sidebar.slider(
+        "Tüketim Oranı (L/çalışan/saat)",
+        min_value=0.5,
+        max_value=5.0,
+        value=config.CONSUMPTION_PER_WORKER_PER_HOUR,
+        step=0.5,
+        help="Çalışan başına saat başına su tüketimi"
+    )
 
-depo_maliyeti = st.sidebar.number_input(
-    "Depo Kurulum Maliyeti (₺)",
-    min_value=1000,
-    max_value=50000,
-    value=config.TANK_COST,
-    step=500
-)
+    yağış_tohumu = st.sidebar.slider(
+        "Yağış Tohumu (Tekrarlanabilirlik için)",
+        min_value=0,
+        max_value=1000,
+        value=config.RAIN_SEED,
+        step=1,
+        help="Yağış oluşturmak için rastgele tohum"
+    )
 
-bakım_maliyeti = st.sidebar.number_input(
-    "Yıllık Bakım Maliyeti (₺)",
-    min_value=100,
-    max_value=5000,
-    value=config.MAINTENANCE_COST,
-    step=100
-)
+    # Ekonomik parametreler
+    st.sidebar.markdown("### 💰 Ekonomik Parametreler")
+    su_fiyatı = st.sidebar.number_input(
+        "Su Fiyatı (₺/Litre)",
+        min_value=0.1,
+        max_value=5.0,
+        value=config.WATER_PRICE,
+        step=0.1
+    )
 
+    depo_maliyeti = st.sidebar.number_input(
+        "Depo Kurulum Maliyeti (₺)",
+        min_value=1000,
+        max_value=50000,
+        value=config.TANK_COST,
+        step=500
+    )
 
-# ===== SIMÜLASYON ÇALIŞTIR DÜĞMESI =====
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    if st.button("▶️ Simülasyonu Çalıştır", width='stretch', key="run_button"):
-        with st.spinner("365 günlük simülasyon çalışıyor..."):
-            # Simülasyon motoru oluştur ve yapılandır
-            engine = SimulationEngine(
-                roof_area=çatı_alanı,
-                roof_efficiency=çatı_verimlilik,
-                tank_capacity=depo_kapasitesi,
-                worker_count=çalışan_sayısı,
-                rain_seed=yağış_tohumu
-            )
-            
-            # Ekonomik analizciri güncelle
-            engine.economy.water_price = su_fiyatı
-            engine.economy.tank_cost = depo_maliyeti
-            engine.economy.maintenance_cost_annual = bakım_maliyeti
-            
-            # Simülasyonu çalıştır
-            results = engine.run_full_simulation()
-            
-            # Oturumda sakla
-            st.session_state.simulation_engine = engine
-            st.session_state.sim_results = results
-            st.session_state.simulation_run = True
-            
-        st.success("Simülasyon başarıyla tamamlandı! ✓")
+    bakım_maliyeti = st.sidebar.number_input(
+        "Yıllık Bakım Maliyeti (₺)",
+        min_value=100,
+        max_value=5000,
+        value=config.MAINTENANCE_COST,
+        step=100
+    )
 
-with col2:
-    if st.sidebar.button("🔄 Sıfırla", width='stretch', key="reset_button"):
-        st.session_state.simulation_run = False
-        st.session_state.sim_results = None
-        st.session_state.simulation_engine = None
-        st.session_state.animation_frame = 0
-        st.rerun()
+    # ===== SIMÜLASYON ÇALIŞTIR DÜĞMESI =====
+    st.sidebar.markdown("---")
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        if st.button("▶️ Çalıştır", width='stretch', key="run_button"):
+            with st.spinner("365 günlük simülasyon çalışıyor..."):
+                # Simülasyon motoru oluştur ve yapılandır
+                engine = SimulationEngine(
+                    roof_area=çatı_alanı,
+                    roof_efficiency=çatı_verimlilik,
+                    tank_capacity=depo_kapasitesi,
+                    worker_count=çalışan_sayısı,
+                    rain_seed=yağış_tohumu
+                )
+                
+                # Ekonomik analizciri güncelle
+                engine.economy.water_price = su_fiyatı
+                engine.economy.tank_cost = depo_maliyeti
+                engine.economy.maintenance_cost_annual = bakım_maliyeti
+                
+                # Simülasyonu çalıştır
+                results = engine.run_full_simulation()
+                
+                # Oturumda sakla
+                st.session_state.simulation_engine = engine
+                st.session_state.sim_results = results
+                st.session_state.simulation_run = True
+                
+            st.success("Simülasyon başarıyla tamamlandı! ✓")
+
+    with col2:
+        if st.button("🔄 Sıfırla", width='stretch', key="reset_button"):
+            st.session_state.simulation_run = False
+            st.session_state.sim_results = None
+            st.session_state.simulation_engine = None
+            st.session_state.animation_frame = 0
+            st.rerun()
 
 
 # ===== ANA İÇERİK =====
