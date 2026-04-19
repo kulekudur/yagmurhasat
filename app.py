@@ -54,22 +54,48 @@ Stokastik yağış oluşturmayı, depo dinamiğini, işçi tüketimini ve ekonom
 def fetch_weather_data(latitude, longitude, year=2024):
     """Meteostat API'dan meteoroloji verisi çek"""
     try:
-        from meteostat import Point, Daily
+        # Meteostat 1.6.5+ için doğru import yolu
+        try:
+            from meteostat import Stations, Daily
+        except ImportError:
+            from meteostat.daily import Daily
+            from meteostat.stations import Stations
         
-        location = Point(latitude, longitude, 100)
+        # Yakın istasyonu bul
+        stations = Stations()
+        stations = stations.nearby(latitude, longitude)
+        station = stations.fetch(1)
+        
+        if station.empty:
+            st.warning("Yakındaki meteoroloji istasyonu bulunamadı")
+            return None
+        
+        # En yakındaki istasyonu seç
+        station_id = station.index[0]
+        
+        # Veri çek
         start = pd.Timestamp(year, 1, 1)
         end = pd.Timestamp(year, 12, 31)
         
-        data = Daily(location, start, end).fetch()
+        data = Daily(station_id, start, end).fetch()
         
         if data.empty:
             return None
         
         data['prcp'] = data['prcp'].fillna(0)
         return data
+    
     except Exception as e:
-        st.warning(f"Meteoroloji verisi alınamadı: {e}")
-        return None
+        st.warning(f"Meteoroloji verisi alınamadı: {str(e)}")
+        # Fallback: Simüle edilmiş veriler dön
+        dates = pd.date_range(f'{year}-01-01', f'{year}-12-31', freq='D')
+        simulated_data = pd.DataFrame({
+            'prcp': np.random.gamma(2, 2, len(dates)),
+            'tavg': 15 + 10 * np.sin(np.arange(len(dates)) * 2 * np.pi / 365),
+            'tmin': 10 + 10 * np.sin(np.arange(len(dates)) * 2 * np.pi / 365),
+            'tmax': 20 + 10 * np.sin(np.arange(len(dates)) * 2 * np.pi / 365),
+        }, index=dates)
+        return simulated_data
 
 
 def create_rain_animation(daily_rain, days_to_show=30):
