@@ -465,7 +465,12 @@ else:
     with tab3:
         st.header("🌧️ Yağmur Animasyonu")
         
-        daily_rain = results['daily_rainfall'][:30]
+        # Backward/forward compatible rainfall access:
+        # Prefer top-level key if present, otherwise use daily_history payload.
+        if 'daily_rainfall' in results:
+            daily_rain = np.array(results['daily_rainfall'])[:30]
+        else:
+            daily_rain = np.array(results.get('daily_history', {}).get('rainfall', []))[:30]
         
         # Animasyon oluştur
         rain_fig = create_rain_animation(daily_rain, 30)
